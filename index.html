@@ -167,6 +167,12 @@ textarea{min-height:140px;line-height:1.5;resize:vertical}
 .lprev img{width:54px;height:54px;border-radius:50%;object-fit:cover;border:2px solid var(--line);background:#fff}
 .out{word-break:break-all;background:var(--tint);border-radius:16px;padding:12px 14px;font-size:13px;margin:0 0 14px}
 
+.up{display:flex;align-items:center;gap:14px;margin:0 0 12px}
+.up img{width:68px;height:68px;border-radius:50%;object-fit:contain;background:#fff;border:2px solid currentColor;flex:none}
+.up .ph{width:68px;height:68px;border-radius:50%;border:2px dashed currentColor;display:grid;place-items:center;font-size:24px;opacity:.55;flex:none}
+.upbtn{display:inline-flex !important;align-items:center;gap:6px;margin:0 !important;padding:11px 16px;border-radius:12px;border:2px solid currentColor;font-weight:800 !important;cursor:pointer}
+.upx{background:none;border:0;padding:6px 0 0;margin-left:12px;font-weight:700;text-decoration:underline;cursor:pointer;color:inherit}
+.minil{font-weight:600 !important;font-size:13.5px !important;opacity:.75}
 .toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;transition:.25s;pointer-events:none;z-index:20}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
@@ -222,6 +228,37 @@ function logoUrl(v){
   if (/^[\w.-]+\.(png|jpe?g|webp|gif|svg)$/i.test(v)) return "logos/" + v;
   return "";
 }
+/* ===== Logo subido: se comprime y viaja dentro del link ===== */
+function logoData(v){
+  if (!v || v.length > 9000 || !/^[wj]\.[A-Za-z0-9_-]+$/.test(v)) return "";
+  let b = v.slice(2).replace(/-/g,"+").replace(/_/g,"/"); while (b.length % 4) b += "=";
+  return `data:image/${v[0]==="w"?"webp":"jpeg"};base64,${b}`;
+}
+async function comprimirLogo(file){
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok,err)=>{ const i = new Image(); i.onload = ()=>ok(i); i.onerror = err; i.src = url; });
+    const S = 128, cv = document.createElement("canvas"); cv.width = cv.height = S;
+    const cx = cv.getContext("2d"); cx.fillStyle = "#FFFFFF"; cx.fillRect(0,0,S,S);
+    const w = img.naturalWidth, h = img.naturalHeight, k = Math.min(S*0.92/w, S*0.92/h);
+    cx.imageSmoothingQuality = "high";
+    cx.drawImage(img, (S-w*k)/2, (S-h*k)/2, w*k, h*k);
+    for (const q of [.85,.72,.6,.48,.36]){
+      for (const [tipo,t] of [["image/webp","w"],["image/jpeg","j"]]){
+        const d = cv.toDataURL(tipo, q);
+        if (!d.startsWith("data:"+tipo)) continue;
+        const b = d.split(",")[1].replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+        if (b.length <= 6000) return t + "." + b;
+      }
+    }
+    return "";
+  } finally { URL.revokeObjectURL(url); }
+}
+function upHtml(){
+  const src = gen.lg ? logoData(gen.lg) : logoUrl(gen.i);
+  return `${src?`<img src="${esc(src)}" alt="Logo" onerror="this.style.display='none'">`:`<span class="ph" aria-hidden="true">🖼️</span>`}
+    <div><label class="upbtn" for="g-file">📷 ${src?"Cambiar logo":"Subir logo"}</label>${src?`<button class="upx" data-act="gquitar">Quitar</button>`:""}</div>`;
+}
 function leerConfig(){
   const p = new URLSearchParams(location.search);
   const cfg = JSON.parse(JSON.stringify(DEFAULT));
@@ -231,6 +268,7 @@ function leerConfig(){
   if (p.get("a") && !isNaN(+p.get("a"))) cfg.anticipo = Math.max(0, Math.round(+p.get("a")));
   if (/^[0-9a-fA-F]{6}$/.test(p.get("c")||"")) cfg.color = p.get("c");
   cfg.logo = logoUrl(p.get("i"));
+  const lgd = logoData(p.get("lg")); if (lgd) cfg.logo = lgd;
   if (p.get("s")){
     const arr = p.get("s").split("|").map(x=>x.split("~")).filter(x=>x[0] && +x[1]>0 && +x[2]>=0)
       .map(x=>[x[0].slice(0,40), Math.round(+x[1]), Math.round(+x[2])]).slice(0,12);
@@ -468,7 +506,7 @@ function vistaPanel(){
 }
 
 /* ===== Generador (solo para ti: #crear) ===== */
-let gen = { i:"", n:"", l:"", w:"", a:"100", c:"FF2E88", s:"Manicura en gel, 60, 350\nUñas acrílicas, 120, 550\nPedicura spa, 60, 400\nExtensión de pestañas, 90, 600" };
+let gen = { lg:"", i:"", n:"", l:"", w:"", a:"100", c:"FF2E88", s:"Manicura en gel, 60, 350\nUñas acrílicas, 120, 550\nPedicura spa, 60, 400\nExtensión de pestañas, 90, 600" };
 const PALETA = ["FF2E88","FF5A5F","E3123F","D21FD6","8B3DFF","14B8A6","F59E0B","C2410C"];
 function linkGenerado(){
   const p = new URLSearchParams();
@@ -477,7 +515,7 @@ function linkGenerado(){
   if (gen.w.replace(/\D/g,"")) p.set("w", gen.w.replace(/\D/g,""));
   if (gen.a !== "" && !isNaN(+gen.a)) p.set("a", String(Math.round(+gen.a)));
   p.set("c", gen.c);
-  if (logoUrl(gen.i)) p.set("i", gen.i.trim());
+  if (gen.lg) p.set("lg", gen.lg); else if (logoUrl(gen.i)) p.set("i", gen.i.trim());
   const sv = gen.s.split("\n").map(x=>x.split(",").map(y=>y.trim())).filter(x=>x[0] && +x[1]>0 && x[2]!==undefined && !isNaN(+x[2]))
     .map(x=>`${x[0].replace(/[|~]/g," ")}~${Math.round(+x[1])}~${Math.round(+x[2])}`);
   if (sv.length) p.set("s", sv.join("|"));
@@ -491,9 +529,11 @@ function vistaCrear(){
   <input id="g-n" data-gen="n" placeholder="Ej. Bella Nails" value="${esc(gen.n)}">
   <label for="g-l">Descripción corta</label>
   <input id="g-l" data-gen="l" placeholder="Ej. Uñas y pestañas en Coyoacán" value="${esc(gen.l)}">
-  <label for="g-i">Logo (link de la imagen, opcional)</label>
-  <input id="g-i" data-gen="i" placeholder="Ej. https://i.postimg.cc/.../logo.png" value="${esc(gen.i)}">
-  <div class="lprev"><img id="g-img" alt="" src="${esc(logoUrl(gen.i))}" style="${logoUrl(gen.i)?"":"display:none"}" onerror="this.style.display='none'"><span class="hint" style="margin:0">Pega el link directo de su logo. Si no tienes, déjalo vacío.</span></div>
+  <label>Logo del negocio</label>
+  <div class="up" id="g-up">${upHtml()}</div>
+  <input id="g-file" type="file" accept="image/*" style="display:none">
+  <label class="minil" for="g-i">…o pega el link de una imagen</label>
+  <input id="g-i" data-gen="i" placeholder="https://..." value="${esc(gen.i)}">
   <label for="g-w">WhatsApp del salón (opcional)</label>
   <input id="g-w" data-gen="w" inputmode="tel" placeholder="Ej. 55 1234 5678" value="${esc(gen.w)}">
   <label for="g-a">Anticipo en pesos (0 si no cobra)</label>
@@ -517,8 +557,7 @@ function refrescarGen(){
   const o = document.getElementById("g-out"); if (o) o.textContent = link;
   const w = document.getElementById("g-wa"); if (w) w.href = wa(gen.w, msgGen(link));
   const v = document.getElementById("g-ver"); if (v) v.href = link;
-  const im = document.getElementById("g-img");
-  if (im){ const u = logoUrl(gen.i); if (u){ im.style.display=""; if (im.getAttribute("src")!==u) im.src = u; } else im.style.display = "none"; }
+  const up = document.getElementById("g-up"); if (up) up.innerHTML = upHtml();
 }
 
 /* ===== Render ===== */
@@ -558,6 +597,7 @@ function onClick(e){
   else if (act==="llego"){ const c = citas.find(x=>x.id==v); if (c){ c.estado = "llego"; save(); } }
   else if (act==="falto"){ const c = citas.find(x=>x.id==v); if (c){ c.estado = "falto"; save(); toast("Horario liberado para otra clienta"); } }
   else if (act==="gcolor"){ gen.c = v; }
+  else if (act==="gquitar"){ gen.lg = ""; gen.i = ""; }
   else if (act==="copiar" || act==="gcopiar"){
     const url = act==="copiar" ? location.href.split("#")[0] + "#reservar" : linkGenerado();
     try { navigator.clipboard.writeText(url).then(()=>toast("Link copiado"), ()=>toast("No se pudo copiar, cópialo a mano")); }
@@ -573,11 +613,19 @@ $app.addEventListener("input", e=>{
   const g = e.target.dataset.gen;
   if (g){
     gen[g] = g==="c" ? e.target.value.replace("#","").toUpperCase() : e.target.value;
+    if (g==="i") gen.lg = "";
     if (g==="c") $app.querySelectorAll('[data-act="gcolor"]').forEach(b=>b.setAttribute("aria-pressed","false"));
     refrescarGen(); return;
   }
   const f = e.target.dataset.field; if (!f) return;
   sel[f] = e.target.value; actualizarBarra();
+});
+$app.addEventListener("change", async e=>{
+  if (e.target.id !== "g-file" || !e.target.files || !e.target.files[0]) return;
+  toast("Procesando logo…");
+  try { const r = await comprimirLogo(e.target.files[0]); if (!r) throw new Error("grande"); gen.lg = r; refrescarGen(); toast("Logo listo ✅"); }
+  catch(err){ toast("No pude leer esa imagen. Prueba con JPG o PNG"); }
+  e.target.value = "";
 });
 window.addEventListener("hashchange", ()=>{ ultima = null; render(); window.scrollTo(0,0); });
 render();
